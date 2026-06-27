@@ -58,8 +58,8 @@ function AddModal({ type, onSave, onClose }: {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-end md:items-center justify-center" onClick={onClose}>
-      <div className="bg-white w-full md:w-[380px] md:rounded-3xl rounded-t-3xl p-6 pb-10 md:pb-6 space-y-4" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-end" onClick={onClose}>
+      <div className="bg-white w-full rounded-t-3xl p-6 pb-10 space-y-4" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between">
           <p className="font-bold text-gray-800 text-sm">{type === "savings" ? "💰 저금 추가" : "💸 지출 추가"}</p>
           <button onClick={onClose}><X size={18} className="text-gray-400" /></button>
@@ -248,9 +248,7 @@ export default function App() {
   );
 
   return (
-    /* PC: 회색 배경에 모바일 카드 중앙 정렬 */
-    <div className="min-h-screen bg-gray-200 md:flex md:items-start md:justify-center">
-      <div className="w-full md:max-w-md md:min-h-screen md:shadow-2xl bg-gray-50 flex flex-col">
+    <div className="min-h-screen bg-gray-50 flex flex-col">
 
         {/* 헤더 */}
         <div className="bg-white px-5 pt-12 pb-4 shadow-sm sticky top-0 z-10">
@@ -442,35 +440,34 @@ export default function App() {
           )}
         </div>
 
-        {/* + 플로팅 버튼 */}
-        {(tab === "savings" || tab === "expense") && (
-          <button
-            onClick={() => setAddModal(tab === "savings" ? "savings" : "expense")}
-            className={`fixed bottom-24 right-4 md:right-[calc(50%-200px+16px)] w-12 h-12 rounded-full shadow-lg flex items-center justify-center text-white z-40 ${tab === "savings" ? "bg-green-500" : "bg-red-400"}`}
-          >
-            <Plus size={22} />
-          </button>
-        )}
-        {tab === "home" && txns.length > 0 && (
-          <div className="fixed bottom-24 right-4 md:right-[calc(50%-200px+16px)] flex flex-col gap-2 z-40">
-            <button onClick={() => setAddModal("savings")} className="w-11 h-11 rounded-full bg-green-500 shadow-lg flex items-center justify-center text-white text-lg">💰</button>
-            <button onClick={() => setAddModal("expense")} className="w-11 h-11 rounded-full bg-red-400 shadow-lg flex items-center justify-center text-white text-lg">💸</button>
-          </div>
-        )}
-
-        {/* 하단 네비게이션 */}
-        <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full md:max-w-md bg-white border-t border-gray-100 flex items-center px-4 pb-6 pt-3 z-50">
-          {NAV_ITEMS.map(({ key, emoji, label }) => (
-            <button key={key} onClick={() => setTab(key)}
-              className={`flex-1 flex flex-col items-center gap-0.5 transition-all ${tab === key ? "scale-110" : "opacity-40"}`}>
-              <span className="text-xl">{emoji}</span>
-              <span className={`text-[10px] font-medium ${tab === key ? "text-green-500" : "text-gray-400"}`}>{label}</span>
-            </button>
-          ))}
+      {/* + 플로팅 버튼 */}
+      {(tab === "savings" || tab === "expense") && (
+        <button
+          onClick={() => setAddModal(tab === "savings" ? "savings" : "expense")}
+          className={`fixed bottom-24 right-4 w-12 h-12 rounded-full shadow-lg flex items-center justify-center text-white z-40 ${tab === "savings" ? "bg-green-500" : "bg-red-400"}`}
+        >
+          <Plus size={22} />
+        </button>
+      )}
+      {tab === "home" && txns.length > 0 && (
+        <div className="fixed bottom-24 right-4 flex flex-col gap-2 z-40">
+          <button onClick={() => setAddModal("savings")} className="w-11 h-11 rounded-full bg-green-500 shadow-lg flex items-center justify-center text-white text-lg">💰</button>
+          <button onClick={() => setAddModal("expense")} className="w-11 h-11 rounded-full bg-red-400 shadow-lg flex items-center justify-center text-white text-lg">💸</button>
         </div>
+      )}
 
-        {addModal && <AddModal type={addModal} onSave={addTxn} onClose={() => setAddModal(null)} />}
+      {/* 하단 네비게이션 */}
+      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 flex items-center px-4 pb-6 pt-3 z-50">
+        {NAV_ITEMS.map(({ key, emoji, label }) => (
+          <button key={key} onClick={() => setTab(key)}
+            className={`flex-1 flex flex-col items-center gap-0.5 transition-all ${tab === key ? "scale-110" : "opacity-40"}`}>
+            <span className="text-xl">{emoji}</span>
+            <span className={`text-[10px] font-medium ${tab === key ? "text-green-500" : "text-gray-400"}`}>{label}</span>
+          </button>
+        ))}
       </div>
+
+      {addModal && <AddModal type={addModal} onSave={addTxn} onClose={() => setAddModal(null)} />}
     </div>
   );
 }
