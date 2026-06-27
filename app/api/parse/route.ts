@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as XLSX from "xlsx";
+import { decryptOOXML } from "@/lib/decrypt-xlsx";
 import { parseKakaoCSV, parseKakaoExcelRows, parseShinhanData, guessCategory } from "@/lib/parsers";
 
 export async function POST(req: NextRequest) {
@@ -23,26 +24,27 @@ export async function POST(req: NextRequest) {
       txns = parseKakaoCSV(text);
 
     } else if (source === "kakao" && isExcel) {
-      // 카카오뱅크 엑셀 — SheetJS로 암호 해제 후 파싱
+      // 카카오뱅크 엑셀 — ECMA-376 AES 복호화 후 파싱
       if (!password) {
         return NextResponse.json(
-          { error: "카카오뱅크 엑셀 파일은 비밀번호가 필요합니다. (주민번호 앞 6자리)" },
+          { error: "카카오뱅크 엑셀 파일에 비밀번호가 필요합니다. (주민번호 앞 6자리)" },
           { status: 400 }
         );
       }
-      // SheetJS 0.18+ 는 password 옵션으로 OOXML 암호화 지원
-      const wb = XLSX.read(buffer, { type: "buffer", cellDates: true, password });
+      // 1. AES-256 복호화 → 순수 ZIP(XLSX) 바이트로 변환
+      const decrypted = await decryptOOXML(buffer, password);
+      // 2. 복호화된 XLSX 파싱
+      const wb = XLSX.read(decrypted, { type: "buffer", cellDates: true });
       const ws = wb.Sheets[wb.SheetNames[0]];
-      // raw rows 추출
       const rows = XLSX.utils.sheet_to_json<(string | number | Date | null)[]>(ws, {
         header: 1,
         defval: null,
-        raw: false, // 날짜를 문자열로
+        raw: false,
       });
       txns = parseKakaoExcelRows(rows as (string | number | Date | null)[][]);
 
     } else {
-      // 신한카드 등
+      // 신한카드 등 — 암호 없는 엑셀
       const readOpts: XLSX.ParsingOptions = { type: "buffer", cellDates: true };
       if (password) (readOpts as Record<string, unknown>).password = password;
       const wb = XLSX.read(buffer, readOpts);
@@ -56,9 +58,14 @@ export async function POST(req: NextRequest) {
 
   } catch (e: unknown) {
     const msg = (e as Error).message ?? "파싱 오류";
-    if (msg.toLowerCase().includes("password") || msg.toLowerCase().includes("decrypt") || msg.toLowerCase().includes("암호")) {
+    if (
+      msg.toLowerCase().includes("password") ||
+      msg.toLowerCase().includes("decrypt") ||
+      msg.toLowerCase().includes("wrong") ||
+      msg.includes("비밀번호")
+    ) {
       return NextResponse.json(
-        { error: "비밀번호가 틀렸습니다. 주민번호 앞 6자리를 확인해주세요." },
+        { error: "비밀번호가 틀렸습니다. 주민번호 앞 6자리를 다시 확인해주세요." },
         { status: 400 }
       );
     }
