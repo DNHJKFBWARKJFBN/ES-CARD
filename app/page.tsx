@@ -1,20 +1,7 @@
 "use client";
 
 import { useState, useCallback, useEffect, useMemo } from "react";
-import { ArrowUpRight, ArrowDownRight, Pencil, Check, ChevronLeft, ChevronRight, AlertTriangle, TrendingDown, Plus, X } from "lucide-react";
-
-/* ── 카테고리 ── */
-const CATEGORIES = [
-  "식비", "카페/음료", "쇼핑", "교통", "통신", "의료/건강",
-  "문화/여가", "여행", "교육", "뷰티/미용", "마트/편의점",
-  "월세/관리비", "공과금", "보험", "구독", "기타",
-];
-const CAT_COLOR: Record<string, string> = {
-  "식비": "#f97316", "카페/음료": "#a78bfa", "쇼핑": "#ec4899", "교통": "#3b82f6",
-  "통신": "#06b6d4", "의료/건강": "#10b981", "문화/여가": "#8b5cf6", "여행": "#f59e0b",
-  "교육": "#6366f1", "뷰티/미용": "#f43f5e", "마트/편의점": "#84cc16", "월세/관리비": "#64748b",
-  "공과금": "#0ea5e9", "보험": "#78716c", "구독": "#d946ef", "기타": "#9ca3af",
-};
+import { ArrowUpRight, ArrowDownRight, Pencil, Check, ChevronLeft, ChevronRight, Plus, X } from "lucide-react";
 
 const TARGET_KEY = "es_savings_target";
 const TXN_KEY    = "es_savings_txns";
@@ -26,33 +13,9 @@ interface Transaction {
   description: string;
   amount: number;
   type: EntryType;
-  category?: string;
 }
 
-type Tab = "home" | "expense" | "savings" | "analytics";
-
-/* ── 도넛 차트 ── */
-function DonutChart({ data }: { data: { label: string; value: number; color: string }[] }) {
-  const total = data.reduce((s, d) => s + d.value, 0);
-  if (total === 0) return <div className="w-32 h-32 rounded-full bg-gray-100 mx-auto" />;
-  let cum = 0;
-  const R = 54, CX = 64, CY = 64;
-  const segs = data.map((d) => {
-    const pct = d.value / total;
-    const s = cum * 360, e = (cum + pct) * 360;
-    cum += pct;
-    const r = (deg: number) => (deg - 90) * (Math.PI / 180);
-    const x1 = CX + R * Math.cos(r(s)), y1 = CY + R * Math.sin(r(s));
-    const x2 = CX + R * Math.cos(r(e)), y2 = CY + R * Math.sin(r(e));
-    return { ...d, path: `M${CX} ${CY} L${x1} ${y1} A${R} ${R} 0 ${pct > 0.5 ? 1 : 0} 1 ${x2} ${y2}Z` };
-  });
-  return (
-    <svg viewBox="0 0 128 128" className="w-32 h-32">
-      {segs.map((s, i) => <path key={i} d={s.path} fill={s.color} />)}
-      <circle cx={CX} cy={CY} r={36} fill="white" />
-    </svg>
-  );
-}
+type Tab = "home" | "expense" | "savings";
 
 /* ── 스파크라인 ── */
 function Sparkline({ data }: { data: number[] }) {
@@ -69,18 +32,17 @@ function Sparkline({ data }: { data: number[] }) {
   );
 }
 
-/* ── 수기 입력 모달 ── */
+/* ── 입력 모달 ── */
 function AddModal({ type, onSave, onClose }: { type: EntryType; onSave: (t: Transaction) => void; onClose: () => void }) {
   const today = new Date().toISOString().slice(0, 10);
   const [amount, setAmount] = useState("");
   const [desc, setDesc] = useState("");
   const [date, setDate] = useState(today);
-  const [cat, setCat] = useState("기타");
 
   const submit = () => {
     const amt = parseInt(amount.replace(/,/g, ""));
     if (!amt || !desc) return;
-    onSave({ id: `${type}-${Date.now()}`, date, description: desc, amount: amt, type, category: type === "expense" ? cat : undefined });
+    onSave({ id: `${type}-${Date.now()}`, date, description: desc, amount: amt, type });
     onClose();
   };
 
@@ -122,16 +84,6 @@ function AddModal({ type, onSave, onClose }: { type: EntryType; onSave: (t: Tran
           />
         </div>
 
-        {type === "expense" && (
-          <div>
-            <label className="text-xs text-gray-400 mb-1 block">카테고리</label>
-            <select value={cat} onChange={e => setCat(e.target.value)}
-              className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none">
-              {CATEGORIES.map(c => <option key={c}>{c}</option>)}
-            </select>
-          </div>
-        )}
-
         <button
           onClick={submit}
           className={`w-full py-3 rounded-2xl text-white font-bold text-sm ${type === "savings" ? "bg-green-500" : "bg-red-400"}`}
@@ -144,16 +96,14 @@ function AddModal({ type, onSave, onClose }: { type: EntryType; onSave: (t: Tran
 }
 
 export default function App() {
-  const [txns, setTxns]               = useState<Transaction[]>([]);
-  const [target, setTarget]           = useState<number | null>(null);
+  const [txns, setTxns]                   = useState<Transaction[]>([]);
+  const [target, setTarget]               = useState<number | null>(null);
   const [editingTarget, setEditingTarget] = useState(false);
-  const [targetInput, setTargetInput] = useState("");
-  const [tab, setTab]                 = useState<Tab>("home");
-  const [monthOffset, setMonthOffset] = useState(0);
-  const [addModal, setAddModal]       = useState<EntryType | null>(null);
-  const [editingCat, setEditingCat]   = useState<string | null>(null);
+  const [targetInput, setTargetInput]     = useState("");
+  const [tab, setTab]                     = useState<Tab>("home");
+  const [monthOffset, setMonthOffset]     = useState(0);
+  const [addModal, setAddModal]           = useState<EntryType | null>(null);
 
-  // 로드
   useEffect(() => {
     const t = localStorage.getItem(TARGET_KEY);
     if (t) setTarget(parseFloat(t));
@@ -161,7 +111,6 @@ export default function App() {
     if (d) setTxns(JSON.parse(d));
   }, []);
 
-  // 저장
   useEffect(() => {
     localStorage.setItem(TXN_KEY, JSON.stringify(txns));
   }, [txns]);
@@ -172,13 +121,9 @@ export default function App() {
     setEditingTarget(false);
   };
 
-  const addTxn = useCallback((t: Transaction) => {
-    setTxns(prev => [t, ...prev]);
-  }, []);
-
+  const addTxn = useCallback((t: Transaction) => setTxns(prev => [t, ...prev]), []);
   const deleteTxn = (id: string) => setTxns(prev => prev.filter(t => t.id !== id));
 
-  // 날짜 헬퍼
   const targetDate = useMemo(() => {
     const d = new Date(); d.setMonth(d.getMonth() + monthOffset); return d;
   }, [monthOffset]);
@@ -189,8 +134,8 @@ export default function App() {
     return date.startsWith(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
   }, []);
 
-  const curTxns    = useMemo(() => txns.filter(t => inMonth(t.date, monthOffset)), [txns, monthOffset, inMonth]);
-  const prevTxns   = useMemo(() => txns.filter(t => inMonth(t.date, monthOffset - 1)), [txns, monthOffset, inMonth]);
+  const curTxns  = useMemo(() => txns.filter(t => inMonth(t.date, monthOffset)), [txns, monthOffset, inMonth]);
+  const prevTxns = useMemo(() => txns.filter(t => inMonth(t.date, monthOffset - 1)), [txns, monthOffset, inMonth]);
 
   const curSavings  = useMemo(() => curTxns.filter(t => t.type === "savings"), [curTxns]);
   const curExpenses = useMemo(() => curTxns.filter(t => t.type === "expense"), [curTxns]);
@@ -198,46 +143,22 @@ export default function App() {
   const totalSavings = useMemo(() => curSavings.reduce((s, t) => s + t.amount, 0), [curSavings]);
   const totalExpense = useMemo(() => curExpenses.reduce((s, t) => s + t.amount, 0), [curExpenses]);
 
-  // 누적 저금 (전체 기간)
-  const allTimeSavings = useMemo(() => txns.filter(t => t.type === "savings").reduce((s, t) => s + t.amount, 0), [txns]);
-
-  const prevTotalSavings = useMemo(() => prevTxns.filter(t => t.type === "savings").reduce((s, t) => s + t.amount, 0), [prevTxns]);
+  const allTimeSavings    = useMemo(() => txns.filter(t => t.type === "savings").reduce((s, t) => s + t.amount, 0), [txns]);
+  const prevTotalSavings  = useMemo(() => prevTxns.filter(t => t.type === "savings").reduce((s, t) => s + t.amount, 0), [prevTxns]);
   const momDiff = prevTotalSavings > 0 ? ((totalSavings - prevTotalSavings) / prevTotalSavings) * 100 : null;
 
-  // 카테고리 분석
-  const catTotals = useMemo(() =>
-    CATEGORIES.map(cat => ({
-      cat, color: CAT_COLOR[cat],
-      total: curExpenses.filter(t => t.category === cat).reduce((s, t) => s + t.amount, 0),
-    })).filter(c => c.total > 0).sort((a, b) => b.total - a.total),
-    [curExpenses]);
-
-  // 지출 Top
   const topSpend = useMemo(() => {
     const map: Record<string, number> = {};
     curExpenses.forEach(t => { map[t.description] = (map[t.description] || 0) + t.amount; });
     return Object.entries(map).sort((a, b) => b[1] - a[1]).slice(0, 5);
   }, [curExpenses]);
 
-  // 일별 저금 스파크라인
   const dailySavings = useMemo(() => {
     const days = new Date(targetDate.getFullYear(), targetDate.getMonth() + 1, 0).getDate();
     const map: Record<number, number> = {};
     curSavings.forEach(t => { const d = parseInt(t.date.slice(8, 10)); map[d] = (map[d] || 0) + t.amount; });
     return Array.from({ length: days }, (_, i) => map[i + 1] || 0);
   }, [curSavings, targetDate]);
-
-  // 지출 줄여야 할 곳
-  const warnings = useMemo(() => {
-    const prevMap: Record<string, number> = {};
-    prevTxns.filter(t => t.type === "expense").forEach(t => {
-      prevMap[t.category ?? "기타"] = (prevMap[t.category ?? "기타"] || 0) + t.amount;
-    });
-    return catTotals.filter(c => {
-      const prev = prevMap[c.cat] || 0;
-      return prev === 0 ? c.total > 50000 : (c.total - prev) / prev > 0.2;
-    }).slice(0, 3);
-  }, [catTotals, prevTxns]);
 
   const fmt = (n: number) => `₩${n.toLocaleString()}`;
   const targetPct = target && allTimeSavings ? Math.min(100, (allTimeSavings / target) * 100) : 0;
@@ -323,7 +244,7 @@ export default function App() {
               </div>
             </div>
 
-            {/* 스파크라인 */}
+            {/* 일별 저금 스파크라인 */}
             {dailySavings.some(v => v > 0) && (
               <div className="bg-white rounded-2xl p-4 shadow-sm">
                 <p className="text-xs text-gray-400 mb-1">📊 이번 달 일별 저금</p>
@@ -341,34 +262,6 @@ export default function App() {
                     저금 {momDiff >= 0 ? `${momDiff.toFixed(0)}% 더 했어요!` : `${Math.abs(momDiff).toFixed(0)}% 줄었어요`}
                     {" "}(전월 {fmt(prevTotalSavings)})
                   </p>
-                </div>
-              </div>
-            )}
-
-            {/* 지출 줄여야 할 곳 */}
-            {warnings.length > 0 && (
-              <div className="bg-white rounded-2xl p-4 shadow-sm">
-                <div className="flex items-center gap-2 mb-3">
-                  <AlertTriangle size={14} className="text-amber-500" />
-                  <p className="text-xs font-semibold text-gray-700">⚠️ 지출 줄여야 할 곳</p>
-                </div>
-                <div className="space-y-2">
-                  {warnings.map(({ cat, total, color }) => {
-                    const prev = prevTxns.filter(t => t.type === "expense" && t.category === cat).reduce((s, t) => s + t.amount, 0);
-                    const pct = prev > 0 ? ((total - prev) / prev) * 100 : null;
-                    return (
-                      <div key={cat} className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <span className="w-2 h-2 rounded-full" style={{ background: color }} />
-                          <span className="text-xs text-gray-700">{cat}</span>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-xs font-semibold">{fmt(total)}</p>
-                          {pct !== null && <p className="text-[10px] text-red-400">+{pct.toFixed(0)}% ↑</p>}
-                        </div>
-                      </div>
-                    );
-                  })}
                 </div>
               </div>
             )}
@@ -416,25 +309,9 @@ export default function App() {
               <div className="space-y-2.5">
                 {curExpenses.sort((a, b) => b.date.localeCompare(a.date)).map(t => (
                   <div key={t.id} className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 flex-1 min-w-0">
-                      {editingCat === t.id ? (
-                        <select autoFocus defaultValue={t.category}
-                          onChange={e => { setTxns(p => p.map(x => x.id === t.id ? { ...x, category: e.target.value } : x)); setEditingCat(null); }}
-                          onBlur={() => setEditingCat(null)}
-                          className="text-[10px] border border-indigo-300 rounded px-1 py-0.5 outline-none">
-                          {CATEGORIES.map(c => <option key={c}>{c}</option>)}
-                        </select>
-                      ) : (
-                        <button onClick={() => setEditingCat(t.id)}
-                          className="px-2 py-0.5 rounded-full text-[10px] text-white font-medium shrink-0"
-                          style={{ background: CAT_COLOR[t.category ?? "기타"] }}>
-                          {t.category ?? "기타"}
-                        </button>
-                      )}
-                      <div className="min-w-0">
-                        <p className="text-xs text-gray-700 truncate">{t.description}</p>
-                        <p className="text-[10px] text-gray-400">{t.date}</p>
-                      </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs text-gray-700 truncate">{t.description}</p>
+                      <p className="text-[10px] text-gray-400">{t.date}</p>
                     </div>
                     <div className="flex items-center gap-1.5">
                       <span className="text-xs font-semibold text-red-400 shrink-0">-{fmt(t.amount)}</span>
@@ -476,61 +353,9 @@ export default function App() {
             </div>
           </>
         )}
-
-        {/* ── 분석 탭 ── */}
-        {tab === "analytics" && (
-          <>
-            <div className="bg-white rounded-2xl p-5 shadow-sm">
-              <p className="text-xs font-semibold text-gray-500 mb-4">🍩 카테고리별 지출</p>
-              <div className="flex items-center gap-4">
-                <DonutChart data={catTotals.slice(0, 6).map(c => ({ label: c.cat, value: c.total, color: c.color }))} />
-                <div className="flex-1 space-y-1.5">
-                  {catTotals.slice(0, 6).map(({ cat, total, color }) => (
-                    <div key={cat} className="flex items-center justify-between">
-                      <div className="flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full shrink-0" style={{ background: color }} />
-                        <span className="text-[11px] text-gray-600">{cat}</span>
-                      </div>
-                      <span className="text-[11px] font-semibold text-gray-700">
-                        {totalExpense > 0 ? ((total / totalExpense) * 100).toFixed(0) : 0}%
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-2xl p-4 shadow-sm">
-              <p className="text-xs font-semibold text-gray-500 mb-3">📈 전체 카테고리 분석</p>
-              <div className="space-y-2.5">
-                {catTotals.map(({ cat, total, color }) => {
-                  const pct = totalExpense > 0 ? (total / totalExpense) * 100 : 0;
-                  return (
-                    <div key={cat}>
-                      <div className="flex justify-between text-xs mb-1">
-                        <div className="flex items-center gap-1.5">
-                          <span className="w-2 h-2 rounded-full" style={{ background: color }} />
-                          <span className="text-gray-600">{cat}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-gray-400">{pct.toFixed(0)}%</span>
-                          <span className="font-semibold text-gray-800">{fmt(total)}</span>
-                        </div>
-                      </div>
-                      <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                        <div className="h-full rounded-full" style={{ width: `${pct}%`, background: color }} />
-                      </div>
-                    </div>
-                  );
-                })}
-                {catTotals.length === 0 && <p className="text-xs text-gray-400 text-center py-4">지출 데이터가 없습니다.</p>}
-              </div>
-            </div>
-          </>
-        )}
       </div>
 
-      {/* + 버튼 (저금/지출 탭에서 표시) */}
+      {/* + 버튼 */}
       {(tab === "savings" || tab === "expense") && (
         <button
           onClick={() => setAddModal(tab === "savings" ? "savings" : "expense")}
@@ -540,7 +365,6 @@ export default function App() {
         </button>
       )}
 
-      {/* 홈 탭 + 버튼들 */}
       {tab === "home" && txns.length > 0 && (
         <div className="fixed bottom-24 right-4 flex flex-col gap-2 z-40">
           <button onClick={() => setAddModal("savings")} className="w-11 h-11 rounded-full bg-green-500 shadow-lg flex items-center justify-center text-white text-lg">💰</button>
@@ -551,10 +375,9 @@ export default function App() {
       {/* 하단 네비게이션 */}
       <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md bg-white border-t border-gray-100 flex items-center px-4 pb-6 pt-3 z-50">
         {([
-          { key: "home",      emoji: "🏠", label: "홈" },
-          { key: "expense",   emoji: "💸", label: "지출" },
-          { key: "savings",   emoji: "💰", label: "저금" },
-          { key: "analytics", emoji: "📊", label: "분석" },
+          { key: "home",    emoji: "🏠", label: "홈" },
+          { key: "expense", emoji: "💸", label: "지출" },
+          { key: "savings", emoji: "💰", label: "저금" },
         ] as { key: Tab; emoji: string; label: string }[]).map(({ key, emoji, label }) => (
           <button key={key} onClick={() => setTab(key)}
             className={`flex-1 flex flex-col items-center gap-0.5 transition-all ${tab === key ? "scale-110" : "opacity-40"}`}>
@@ -564,7 +387,6 @@ export default function App() {
         ))}
       </div>
 
-      {/* 입력 모달 */}
       {addModal && <AddModal type={addModal} onSave={addTxn} onClose={() => setAddModal(null)} />}
     </div>
   );
