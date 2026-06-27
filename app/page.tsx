@@ -14,6 +14,9 @@ const CAT_COLOR: Record<string, string> = {
 const SRC_LABEL: Record<string, string> = { kakao: "카카오뱅크", shinhan: "신한카드", unknown: "기타" };
 const SRC_COLOR: Record<string, string> = { kakao: "bg-yellow-400", shinhan: "bg-blue-500", unknown: "bg-gray-400" };
 const BUDGET_KEY = "es_card_budget";
+const BUDGET_CREDIT_KEY = "es_card_budget_credit";
+const BUDGET_DEBIT_KEY = "es_card_budget_debit";
+const BUDGET_SAVINGS_KEY = "es_card_budget_savings";
 const TXN_KEY = "es_card_transactions";
 
 /* ── 도넛 차트 ── */
@@ -73,6 +76,11 @@ export default function App() {
   const [budget, setBudget] = useState<number | null>(null);
   const [editingBudget, setEditingBudget] = useState(false);
   const [budgetInput, setBudgetInput] = useState("");
+  const [budgetCredit, setBudgetCredit] = useState<number | null>(null);
+  const [budgetDebit, setBudgetDebit] = useState<number | null>(null);
+  const [budgetSavings, setBudgetSavings] = useState<number | null>(null);
+  const [editingSubBudget, setEditingSubBudget] = useState<string | null>(null);
+  const [subBudgetInput, setSubBudgetInput] = useState("");
   const [selectedSource, setSelectedSource] = useState("kakao");
   const [filePassword, setFilePassword] = useState("");
   const [uploading, setUploading] = useState(false);
@@ -84,6 +92,12 @@ export default function App() {
   useEffect(() => {
     const b = localStorage.getItem(BUDGET_KEY);
     if (b) setBudget(parseFloat(b));
+    const bc = localStorage.getItem(BUDGET_CREDIT_KEY);
+    if (bc) setBudgetCredit(parseFloat(bc));
+    const bd = localStorage.getItem(BUDGET_DEBIT_KEY);
+    if (bd) setBudgetDebit(parseFloat(bd));
+    const bs = localStorage.getItem(BUDGET_SAVINGS_KEY);
+    if (bs) setBudgetSavings(parseFloat(bs));
     const t = localStorage.getItem(TXN_KEY);
     if (t) setTxns(JSON.parse(t));
   }, []);
@@ -194,6 +208,16 @@ export default function App() {
     setEditingBudget(false);
   };
 
+  const saveSubBudget = (key: string) => {
+    const v = parseFloat(subBudgetInput.replace(/,/g, ""));
+    if (!isNaN(v) && v > 0) {
+      if (key === "credit") { setBudgetCredit(v); localStorage.setItem(BUDGET_CREDIT_KEY, String(v)); }
+      if (key === "debit") { setBudgetDebit(v); localStorage.setItem(BUDGET_DEBIT_KEY, String(v)); }
+      if (key === "savings") { setBudgetSavings(v); localStorage.setItem(BUDGET_SAVINGS_KEY, String(v)); }
+    }
+    setEditingSubBudget(null);
+  };
+
   const fmt = (n: number) => `₩${n.toLocaleString()}`;
 
   /* ── 렌더 ── */
@@ -253,6 +277,49 @@ export default function App() {
                   </div>
                 </>
               )}
+            </div>
+
+            {/* 신용카드 / 체크카드 / 저금 예산 */}
+            <div className="grid grid-cols-3 gap-2">
+              {([
+                { key: "credit", label: "신용카드 예산", value: budgetCredit, color: "text-purple-500", bg: "bg-purple-50", border: "border-purple-100" },
+                { key: "debit", label: "체크카드 예산", value: budgetDebit, color: "text-blue-500", bg: "bg-blue-50", border: "border-blue-100" },
+                { key: "savings", label: "저금 목표", value: budgetSavings, color: "text-emerald-500", bg: "bg-emerald-50", border: "border-emerald-100" },
+              ] as { key: string; label: string; value: number | null; color: string; bg: string; border: string }[]).map(({ key, label, value, color, bg, border }) => (
+                <div key={key} className={`bg-white rounded-2xl p-3 shadow-sm border ${border}`}>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <p className="text-[10px] text-gray-400 leading-tight">{label}</p>
+                    {editingSubBudget !== key && (
+                      <button onClick={() => { setSubBudgetInput(value ? String(value) : ""); setEditingSubBudget(key); }} className="text-gray-300 hover:text-gray-500 shrink-0">
+                        <Pencil size={11} />
+                      </button>
+                    )}
+                  </div>
+                  {editingSubBudget === key ? (
+                    <div className="flex flex-col gap-1">
+                      <input
+                        autoFocus
+                        type="number"
+                        value={subBudgetInput}
+                        onChange={(e) => setSubBudgetInput(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === "Enter") saveSubBudget(key); if (e.key === "Escape") setEditingSubBudget(null); }}
+                        className={`w-full ${bg} rounded-lg px-2 py-1 text-xs font-bold outline-none ${color}`}
+                        placeholder="금액 입력"
+                      />
+                      <div className="flex gap-1">
+                        <button onClick={() => saveSubBudget(key)} className={`flex-1 text-[10px] ${bg} ${color} rounded-lg py-0.5 font-medium`}>저장</button>
+                        <button onClick={() => setEditingSubBudget(null)} className="flex-1 text-[10px] bg-gray-100 text-gray-400 rounded-lg py-0.5">취소</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button onClick={() => { setSubBudgetInput(value ? String(value) : ""); setEditingSubBudget(key); }} className="w-full text-left">
+                      <p className={`text-sm font-bold ${value ? color : "text-gray-300"}`}>
+                        {value ? `₩${value.toLocaleString()}` : "미설정"}
+                      </p>
+                    </button>
+                  )}
+                </div>
+              ))}
             </div>
 
             {/* 지출/수입 카드 */}
