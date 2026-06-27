@@ -1,6 +1,6 @@
 /**
  * ECMA-376 Agile Encryption 복호화 (Office 2007+, AES-CBC)
- * Node.js crypto 내장 모듈 사용
+ * Spec: ECMA-376-4 §4.3.4 — msoffcrypto-tool 기준 검증
  */
 import crypto from "crypto";
 // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -8,6 +8,9 @@ const CFB = require("cfb") as {
   read: (buf: Buffer, opts: { type: string }) => unknown;
   find: (cfb: unknown, path: string) => { content: Uint8Array } | null;
 };
+
+// 용도별 블록 키 (ECMA-376-4 Table 4)
+const BLOCK_KEY_ENC_KEY = Buffer.from([0x14, 0x6e, 0x0b, 0xe7, 0xab, 0xac, 0xd0, 0xd6]);
 
 function utf16le(str: string): Buffer {
   const buf = Buffer.alloc(str.length * 2);
@@ -21,71 +24,77 @@ function getAttr(tag: string, name: string): string {
 }
 
 function findTag(xml: string, localName: string): string | null {
-  // <localName ...> 또는 <ns:localName ...> 모두 매치, 자기닫힘 포함
   const re = new RegExp(`<[\\w:]*${localName}\\b[^>]*>`, "i");
   const m = xml.match(re);
   return m ? m[0] : null;
 }
 
-function normHashAlgo(algo: string): string {
+function normAlgo(algo: string): string {
   return algo.toLowerCase().replace(/-/g, "");
 }
 
-function deriveCipherKey(
+/**
+ * ECMA-376 §4.3.4.2 키 유도
+ * H0 = H(salt || utf16le(password))
+ * Hi = H(H_{i-1} || i_LE32)          ← 순서 주의: prev 먼저
+ * Hf = H(H_spinCount || blockKey)     ← blockKey는 용도별 8바이트
+ */
+function deriveKey(
   password: string,
   salt: Buffer,
   spinCount: number,
   keyBits: number,
-  blockSize: number,
-  hashAlgo: string
+  hashAlgo: string,
+  blockKey: Buffer
 ): Buffer {
-  const algo = normHashAlgo(hashAlgo);
-  const pwBytes = utf16le(password);
+  const algo = normAlgo(hashAlgo);
+  const pw = utf16le(password);
 
-  let h = crypto.createHash(algo).update(salt).update(pwBytes).digest();
+  // H0
+  let h = crypto.createHash(algo).update(salt).update(pw).digest();
+
+  // H1 ~ Hspincount : H(H_{i-1} || i)
   for (let i = 0; i < spinCount; i++) {
     const ib = Buffer.alloc(4);
     ib.writeUInt32LE(i, 0);
-    h = crypto.createHash(algo).update(ib).update(h).digest();
+    h = crypto.createHash(algo).update(h).update(ib).digest();
   }
-  const block0 = Buffer.alloc(4, 0);
-  h = crypto.createHash(algo).update(h).update(block0).digest();
 
-  // 키를 keyBits/8 바이트로 맞춤 (부족하면 반복 채움)
-  const keyLen = Math.ceil(keyBits / 8);
+  // Hfinal : H(Hspincount || blockKey)
+  h = crypto.createHash(algo).update(h).update(blockKey).digest();
+
+  // keyBits/8 바이트로 맞춤 (해시가 짧으면 반복 채움)
+  const keyLen = keyBits / 8;
   const key = Buffer.alloc(keyLen);
   for (let i = 0; i < keyLen; i++) key[i] = h[i % h.length];
   return key;
 }
 
-function aesCbcDecrypt(data: Buffer, key: Buffer, iv: Buffer, blockSize: number): Buffer {
-  // AES block size는 항상 16, keyBits에 따라 aes-128 / aes-192 / aes-256 결정
-  const keyBits = key.length * 8;
-  const algo = `aes-${keyBits}-cbc`;
-  // IV는 정확히 blockSize(=16) 바이트로 잘라냄/패딩
-  const ivFixed = Buffer.alloc(blockSize);
-  iv.copy(ivFixed, 0, 0, Math.min(iv.length, blockSize));
-  const decipher = crypto.createDecipheriv(algo, key, ivFixed);
-  decipher.setAutoPadding(false);
-  return Buffer.concat([decipher.update(data), decipher.final()]);
+function aesCbcDecrypt(data: Buffer, key: Buffer, iv: Buffer): Buffer {
+  const algo = `aes-${key.length * 8}-cbc`;
+  // IV는 정확히 16바이트 (AES block size)
+  const iv16 = Buffer.alloc(16);
+  iv.copy(iv16, 0, 0, Math.min(iv.length, 16));
+  const dec = crypto.createDecipheriv(algo, key, iv16);
+  dec.setAutoPadding(false);
+  return Buffer.concat([dec.update(data), dec.final()]);
 }
 
 export async function decryptOOXML(buffer: Buffer, password: string): Promise<Buffer> {
   // 1. OLE CFB 파싱
   const compound = CFB.read(buffer, { type: "buffer" });
 
-  // 2. EncryptionInfo 스트림 읽기
+  // 2. EncryptionInfo 읽기
   const encInfoEntry = CFB.find(compound, "EncryptionInfo");
-  if (!encInfoEntry) throw new Error("EncryptionInfo 스트림이 없습니다. 파일 형식을 확인해주세요.");
+  if (!encInfoEntry) throw new Error("EncryptionInfo 스트림이 없습니다.");
   const encInfoBuf = Buffer.from(encInfoEntry.content);
 
-  // versionMajor 확인: 4 = Agile, 2/3 = Standard
   const versionMajor = encInfoBuf.readUInt16LE(0);
   if (versionMajor !== 4) {
-    throw new Error(`지원하지 않는 암호화 버전입니다 (major=${versionMajor}). xlsx 형식 파일을 사용해주세요.`);
+    throw new Error(`지원하지 않는 암호화 버전 (major=${versionMajor}). xlsx 파일을 사용해주세요.`);
   }
 
-  // 8바이트 헤더 이후 XML 추출
+  // 8바이트 헤더 이후 XML
   let xmlStart = 8;
   for (let o = 8; o < Math.min(encInfoBuf.length, 20); o++) {
     if (encInfoBuf[o] === 0x3c || encInfoBuf[o] === 0xef) { xmlStart = o; break; }
@@ -95,20 +104,18 @@ export async function decryptOOXML(buffer: Buffer, password: string): Promise<Bu
   // 3. 태그 파싱
   const kdTag = findTag(xml, "keyData");
   const ekTag = findTag(xml, "encryptedKey");
-  if (!kdTag) throw new Error(`keyData 태그 없음. XML: ${xml.slice(0, 400)}`);
-  if (!ekTag) throw new Error(`encryptedKey 태그 없음. XML: ${xml.slice(0, 400)}`);
+  if (!kdTag) throw new Error(`keyData 없음. XML: ${xml.slice(0, 300)}`);
+  if (!ekTag) throw new Error(`encryptedKey 없음. XML: ${xml.slice(0, 300)}`);
 
-  // keyData 파라미터 (파일 본체 암호화에 사용)
+  // keyData (파일 본체 암호화)
   const kdSalt      = Buffer.from(getAttr(kdTag, "saltValue"), "base64");
   const kdKeyBits   = parseInt(getAttr(kdTag, "keyBits") || "256");
-  const kdBlockSize = parseInt(getAttr(kdTag, "blockSize") || "16");
   const kdHashAlgo  = getAttr(kdTag, "hashAlgorithm") || "SHA512";
 
-  // encryptedKey 파라미터 (키 암호화에 사용)
+  // encryptedKey (키 암호화)
   const ekSalt      = Buffer.from(getAttr(ekTag, "saltValue"), "base64");
   const ekSpinCount = parseInt(getAttr(ekTag, "spinCount") || "100000");
   const ekKeyBits   = parseInt(getAttr(ekTag, "keyBits") || "256");
-  const ekBlockSize = parseInt(getAttr(ekTag, "blockSize") || "16");
   const ekHashAlgo  = getAttr(ekTag, "hashAlgorithm") || "SHA512";
   const encKeyValue = Buffer.from(getAttr(ekTag, "encryptedKeyValue"), "base64");
 
@@ -116,12 +123,12 @@ export async function decryptOOXML(buffer: Buffer, password: string): Promise<Bu
     throw new Error(`encryptedKey 속성 파싱 실패. 태그: ${ekTag}`);
   }
 
-  // 4. 비밀번호로 키 유도 → encryptedKeyValue 복호화 → secretKey
-  const derivedKey = deriveCipherKey(password, ekSalt, ekSpinCount, ekKeyBits, ekBlockSize, ekHashAlgo);
-  const decryptedKeyFull = aesCbcDecrypt(encKeyValue, derivedKey, ekSalt, ekBlockSize);
+  // 4. 비밀번호로 키 유도 → secretKey 복호화
+  const derivedKey = deriveKey(password, ekSalt, ekSpinCount, ekKeyBits, ekHashAlgo, BLOCK_KEY_ENC_KEY);
+  const decryptedKeyFull = aesCbcDecrypt(encKeyValue, derivedKey, ekSalt);
   const secretKey = decryptedKeyFull.slice(0, kdKeyBits / 8);
 
-  // 5. EncryptedPackage 스트림 읽기
+  // 5. EncryptedPackage
   const pkgEntry = CFB.find(compound, "EncryptedPackage");
   if (!pkgEntry) throw new Error("EncryptedPackage 스트림이 없습니다.");
   const pkgBuf = Buffer.from(pkgEntry.content);
@@ -129,18 +136,18 @@ export async function decryptOOXML(buffer: Buffer, password: string): Promise<Bu
   const unencryptedSize = Number(pkgBuf.readBigUInt64LE(0));
   const encData = pkgBuf.slice(8);
 
-  // 6. 4096바이트 세그먼트 단위 복호화
+  // 6. 4096바이트 세그먼트 복호화
   const SEG = 4096;
   const chunks: Buffer[] = [];
-  const hashAlgo = normHashAlgo(kdHashAlgo);
+  const kdAlgo = normAlgo(kdHashAlgo);
 
   for (let i = 0; i * SEG < encData.length; i++) {
     const seg = encData.slice(i * SEG, (i + 1) * SEG);
     const segIdx = Buffer.alloc(4);
     segIdx.writeUInt32LE(i, 0);
-    // IV = H(kdSalt || segIdx)[0..blockSize-1]
-    const iv = crypto.createHash(hashAlgo).update(kdSalt).update(segIdx).digest();
-    chunks.push(aesCbcDecrypt(seg, secretKey, iv, kdBlockSize));
+    // IV = H(kdSalt || segIdx)[0..15]
+    const iv = crypto.createHash(kdAlgo).update(kdSalt).update(segIdx).digest();
+    chunks.push(aesCbcDecrypt(seg, secretKey, iv));
   }
 
   const result = Buffer.concat(chunks).slice(0, unencryptedSize);
