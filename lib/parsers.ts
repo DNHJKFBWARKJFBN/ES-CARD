@@ -135,6 +135,62 @@ function parseCSVLine(line: string): string[] {
   return result;
 }
 
+// 카카오뱅크 엑셀 rows 파싱 (password 해제 후 받은 raw rows)
+export function parseKakaoExcelRows(rows: (string | number | Date | null)[][]): Transaction[] {
+  const txns: Transaction[] = [];
+
+  // 헤더 행 찾기: 거래일 or 날짜 포함하는 행
+  let headerIdx = -1;
+  for (let i = 0; i < Math.min(rows.length, 20); i++) {
+    const row = rows[i].map((c) => String(c ?? "").trim());
+    if (row.some((c) => c.includes("거래일") || c.includes("날짜") || c.includes("일시"))) {
+      headerIdx = i;
+      break;
+    }
+  }
+
+  const headers = headerIdx >= 0 ? rows[headerIdx].map((c) => String(c ?? "").trim()) : [];
+  const dataRows = rows.slice(headerIdx >= 0 ? headerIdx + 1 : 1);
+
+  const dateCol = findColIdx(headers, ["거래일시", "거래일", "날짜", "일시"]);
+  const descCol = findColIdx(headers, ["거래내용", "내용", "적요", "메모"]);
+  const outCol = findColIdx(headers, ["출금(원)", "출금", "지출"]);
+  const inCol = findColIdx(headers, ["입금(원)", "입금", "수입"]);
+
+  dataRows.forEach((row, i) => {
+    if (row.every((c) => !String(c ?? "").trim())) return;
+
+    const dateRaw = row[dateCol];
+    const desc = String(row[descCol] ?? "").trim();
+
+    // exceljs는 날짜 셀을 Date 객체로 줄 수 있음
+    let date: string | null = null;
+    if (dateRaw instanceof Date) {
+      date = dateRaw.toISOString().slice(0, 10);
+    } else {
+      date = normalizeDate(String(dateRaw ?? "").trim());
+    }
+    if (!date || !desc) return;
+
+    const outRaw = String(row[outCol] ?? "").replace(/[^0-9]/g, "");
+    const inRaw = String(row[inCol] ?? "").replace(/[^0-9]/g, "");
+    const out = parseInt(outRaw) || 0;
+    const inn = parseInt(inRaw) || 0;
+    if (out === 0 && inn === 0) return;
+
+    txns.push({
+      id: `kakao-xl-${i}-${date}`,
+      date,
+      description: desc,
+      amount: out > 0 ? out : inn,
+      type: out > 0 ? "expense" : "income",
+      source: "kakao",
+    });
+  });
+
+  return txns;
+}
+
 export const CATEGORIES = [
   "식비", "카페/음료", "쇼핑", "교통", "통신", "의료/건강",
   "문화/여가", "여행", "교육", "뷰티/미용", "마트/편의점",
