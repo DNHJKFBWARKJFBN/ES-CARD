@@ -8,6 +8,7 @@
     "start": "next start"
   },
   "dependencies": {
+    "@vercel/kv": "^3.0.0",
     "date-fns": "^4.4.0",
     "exceljs": "^4.4.0",
     "lucide-react": "^1.21.0",
