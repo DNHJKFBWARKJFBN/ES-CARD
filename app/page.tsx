@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
-import { Upload, Home, PieChart, ArrowUpRight, ArrowDownRight, Pencil, Check, ChevronLeft, ChevronRight, AlertTriangle, TrendingDown, TrendingUp, X } from "lucide-react";
+import { Upload, ArrowUpRight, ArrowDownRight, Pencil, Check, ChevronLeft, ChevronRight, AlertTriangle, TrendingDown, TrendingUp, X } from "lucide-react";
 import { Transaction, CATEGORIES } from "@/lib/parsers";
 
 /* ── 색상 ── */
@@ -210,10 +210,14 @@ export default function App() {
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col max-w-md mx-auto relative">
       {/* 상단 헤더 */}
-      <div className="bg-white px-5 pt-12 pb-5 shadow-sm">
-        <div className="flex items-center justify-between mb-1">
+      <div className="bg-white px-5 pt-12 pb-4 shadow-sm">
+        <div className="flex items-center gap-2 mb-3">
+          <span className="text-xl">💳</span>
+          <span className="text-base font-bold text-gray-800">ES Card 가계부</span>
+        </div>
+        <div className="flex items-center justify-between">
           <button onClick={() => setMonthOffset((o) => o - 1)} className="p-1 text-gray-400 hover:text-gray-700"><ChevronLeft size={18} /></button>
-          <span className="text-sm font-semibold text-gray-700">{monthLabel}</span>
+          <span className="text-sm font-semibold text-gray-700">📅 {monthLabel}</span>
           <button onClick={() => setMonthOffset((o) => Math.min(o + 1, 0))} className="p-1 text-gray-400 hover:text-gray-700 disabled:opacity-30" disabled={monthOffset === 0}><ChevronRight size={18} /></button>
         </div>
       </div>
@@ -231,7 +235,7 @@ export default function App() {
               const remaining = Math.max(0, totalBudget - totalExpense);
               return (
                 <div className="bg-gradient-to-br from-green-400 to-emerald-600 rounded-3xl p-6 text-white shadow-xl">
-                  <p className="text-xs opacity-70 mb-1">이번 달 총 예산</p>
+                  <p className="text-xs opacity-70 mb-1">💰 이번 달 총 예산</p>
                   <p className="text-4xl font-bold tracking-tight mb-1">
                     {totalBudget > 0 ? fmt(totalBudget) : <span className="text-white/50 text-2xl">신용+체크 예산을 입력해주세요</span>}
                   </p>
@@ -258,9 +262,9 @@ export default function App() {
             {/* 신용카드 / 체크카드 / 저금 예산 */}
             <div className="grid grid-cols-3 gap-2">
               {([
-                { key: "credit", label: "신용카드 예산", value: budgetCredit, color: "text-purple-500", bg: "bg-purple-50", border: "border-purple-100" },
-                { key: "debit", label: "체크카드 예산", value: budgetDebit, color: "text-blue-500", bg: "bg-blue-50", border: "border-blue-100" },
-                { key: "savings", label: "저금 목표", value: budgetSavings, color: "text-emerald-500", bg: "bg-emerald-50", border: "border-emerald-100" },
+                { key: "credit", label: "💳 신용카드", value: budgetCredit, color: "text-purple-500", bg: "bg-purple-50", border: "border-purple-100" },
+                { key: "debit", label: "🏧 체크카드", value: budgetDebit, color: "text-blue-500", bg: "bg-blue-50", border: "border-blue-100" },
+                { key: "savings", label: "🐷 저금 목표", value: budgetSavings, color: "text-emerald-500", bg: "bg-emerald-50", border: "border-emerald-100" },
               ] as { key: string; label: string; value: number | null; color: string; bg: string; border: string }[]).map(({ key, label, value, color, bg, border }) => (
                 <div key={key} className={`bg-white rounded-2xl p-3 shadow-sm border ${border}`}>
                   <div className="flex items-center justify-between mb-1.5">
@@ -305,7 +309,7 @@ export default function App() {
                   <div className="w-6 h-6 rounded-full bg-red-50 flex items-center justify-center">
                     <TrendingDown size={12} className="text-red-500" />
                   </div>
-                  <p className="text-xs text-gray-400">지출</p>
+                  <p className="text-xs text-gray-400">💸 지출</p>
                 </div>
                 <p className="text-xl font-bold text-gray-800">{fmt(totalExpense)}</p>
                 {momDiff !== null && (
@@ -320,7 +324,7 @@ export default function App() {
                   <div className="w-6 h-6 rounded-full bg-green-50 flex items-center justify-center">
                     <TrendingUp size={12} className="text-green-500" />
                   </div>
-                  <p className="text-xs text-gray-400">수입</p>
+                  <p className="text-xs text-gray-400">💵 수입</p>
                 </div>
                 <p className="text-xl font-bold text-gray-800">{fmt(totalIncome)}</p>
                 <p className="text-[10px] mt-1 text-gray-400">순수지 <span className={totalIncome - totalExpense >= 0 ? "text-green-500 font-semibold" : "text-red-400 font-semibold"}>{fmt(totalIncome - totalExpense)}</span></p>
@@ -330,7 +334,7 @@ export default function App() {
             {/* 일별 지출 스파크라인 */}
             {dailySpend.some((v) => v > 0) && (
               <div className="bg-white rounded-2xl p-4 shadow-sm">
-                <p className="text-xs text-gray-400 mb-2">이번 달 일별 지출</p>
+                <p className="text-xs text-gray-400 mb-2">📊 이번 달 일별 지출</p>
                 <Sparkline data={dailySpend} />
               </div>
             )}
@@ -342,7 +346,7 @@ export default function App() {
                   ? <TrendingDown size={20} className="text-green-500 shrink-0" />
                   : <TrendingUp size={20} className="text-red-400 shrink-0" />}
                 <div>
-                  <p className="text-sm font-semibold text-gray-700">전월 대비</p>
+                  <p className="text-sm font-semibold text-gray-700">📆 전월 대비</p>
                   <p className={`text-xs ${momDiff <= 0 ? "text-green-600" : "text-red-500"}`}>
                     {momDiff <= 0
                       ? `${Math.abs(momDiff).toFixed(1)}% 절약했어요 🎉`
@@ -358,7 +362,7 @@ export default function App() {
               <div className="bg-white rounded-2xl p-4 shadow-sm">
                 <div className="flex items-center gap-2 mb-3">
                   <AlertTriangle size={14} className="text-amber-500" />
-                  <p className="text-xs font-semibold text-gray-700">지출 줄여야 할 곳</p>
+                  <p className="text-xs font-semibold text-gray-700">⚠️ 지출 줄여야 할 곳</p>
                 </div>
                 <div className="space-y-2">
                   {warnings.map(({ cat, total, color }) => {
@@ -395,14 +399,14 @@ export default function App() {
         {tab === "expenses" && (
           <>
             <div className="bg-white rounded-2xl p-4 shadow-sm">
-              <p className="text-xs text-gray-400 mb-1">이번 달 총 지출</p>
+              <p className="text-xs text-gray-400 mb-1">💸 이번 달 총 지출</p>
               <p className="text-2xl font-bold text-red-500">{fmt(totalExpense)}</p>
             </div>
 
             {/* 제일 많이 지출한 곳 */}
             {topSpend.length > 0 && (
               <div className="bg-white rounded-2xl p-4 shadow-sm">
-                <p className="text-xs font-semibold text-gray-500 mb-3">제일 많이 지출한 곳</p>
+                <p className="text-xs font-semibold text-gray-500 mb-3">🏆 제일 많이 지출한 곳</p>
                 <div className="space-y-2">
                   {topSpend.map(([desc, amt], i) => (
                     <div key={desc} className="flex items-center justify-between">
@@ -419,7 +423,7 @@ export default function App() {
 
             {/* 세부 지출 내역 */}
             <div className="bg-white rounded-2xl p-4 shadow-sm">
-              <p className="text-xs font-semibold text-gray-500 mb-3">세부 지출 내역</p>
+              <p className="text-xs font-semibold text-gray-500 mb-3">🧾 세부 지출 내역</p>
               <div className="space-y-2.5">
                 {curExpenses.sort((a, b) => b.date.localeCompare(a.date)).map((t) => (
                   <div key={t.id} className="flex items-center justify-between">
@@ -449,13 +453,13 @@ export default function App() {
         {tab === "income" && (
           <>
             <div className="bg-white rounded-2xl p-4 shadow-sm">
-              <p className="text-xs text-gray-400 mb-1">이번 달 총 수입</p>
+              <p className="text-xs text-gray-400 mb-1">💵 이번 달 총 수입</p>
               <p className="text-2xl font-bold text-green-500">{fmt(totalIncome)}</p>
             </div>
 
             {topIncome.length > 0 && (
               <div className="bg-white rounded-2xl p-4 shadow-sm">
-                <p className="text-xs font-semibold text-gray-500 mb-3">제일 많이 입금된 곳</p>
+                <p className="text-xs font-semibold text-gray-500 mb-3">🏆 제일 많이 입금된 곳</p>
                 <div className="space-y-2">
                   {topIncome.map(([desc, amt], i) => (
                     <div key={desc} className="flex items-center justify-between">
@@ -471,7 +475,7 @@ export default function App() {
             )}
 
             <div className="bg-white rounded-2xl p-4 shadow-sm">
-              <p className="text-xs font-semibold text-gray-500 mb-3">세부 수입 내역</p>
+              <p className="text-xs font-semibold text-gray-500 mb-3">🧾 세부 수입 내역</p>
               <div className="space-y-2.5">
                 {curIncome.sort((a, b) => b.date.localeCompare(a.date)).map((t) => (
                   <div key={t.id} className="flex items-center justify-between">
@@ -492,7 +496,7 @@ export default function App() {
         {tab === "analytics" && (
           <>
             <div className="bg-white rounded-2xl p-5 shadow-sm">
-              <p className="text-xs font-semibold text-gray-500 mb-4">카테고리별 지출</p>
+              <p className="text-xs font-semibold text-gray-500 mb-4">🍩 카테고리별 지출</p>
               <div className="flex items-center gap-4">
                 <DonutChart data={catTotals.slice(0, 6).map((c) => ({ label: c.cat, value: c.total, color: c.color }))} />
                 <div className="flex-1 space-y-1.5">
@@ -510,7 +514,7 @@ export default function App() {
             </div>
 
             <div className="bg-white rounded-2xl p-4 shadow-sm">
-              <p className="text-xs font-semibold text-gray-500 mb-3">전체 카테고리 분석</p>
+              <p className="text-xs font-semibold text-gray-500 mb-3">📈 전체 카테고리 분석</p>
               <div className="space-y-2.5">
                 {catTotals.map(({ cat, total, color }) => {
                   const pct = totalExpense > 0 ? (total / totalExpense) * 100 : 0;
@@ -542,7 +546,7 @@ export default function App() {
         {tab === "upload" && (
           <>
             <div className="bg-white rounded-2xl p-5 shadow-sm">
-              <p className="text-sm font-semibold text-gray-700 mb-4">파일 업로드</p>
+              <p className="text-sm font-semibold text-gray-700 mb-4">📂 파일 업로드</p>
               <div className="flex gap-2 mb-4">
                 {[{ key: "kakao", label: "카카오뱅크", sub: "CSV" }, { key: "shinhan", label: "신한카드", sub: "엑셀/CSV" }].map(({ key, label, sub }) => (
                   <button key={key} onClick={() => setSelectedSource(key)}
@@ -615,16 +619,16 @@ export default function App() {
       {/* 하단 네비게이션 */}
       <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md bg-white border-t border-gray-100 flex items-center px-4 pb-6 pt-3 z-50">
         {([
-          { key: "home", icon: <Home size={20} />, label: "홈" },
-          { key: "expenses", icon: <TrendingDown size={20} />, label: "지출" },
-          { key: "income", icon: <TrendingUp size={20} />, label: "수입" },
-          { key: "analytics", icon: <PieChart size={20} />, label: "분석" },
-          { key: "upload", icon: <Upload size={20} />, label: "파일" },
-        ] as { key: Tab; icon: React.ReactNode; label: string }[]).map(({ key, icon, label }) => (
+          { key: "home", emoji: "🏠", label: "홈" },
+          { key: "expenses", emoji: "💸", label: "지출" },
+          { key: "income", emoji: "💵", label: "수입" },
+          { key: "analytics", emoji: "📊", label: "분석" },
+          { key: "upload", emoji: "📂", label: "파일" },
+        ] as { key: Tab; emoji: string; label: string }[]).map(({ key, emoji, label }) => (
           <button key={key} onClick={() => setTab(key)}
-            className={`flex-1 flex flex-col items-center gap-0.5 transition-colors ${tab === key ? "text-green-500" : "text-gray-300"}`}>
-            {icon}
-            <span className="text-[10px] font-medium">{label}</span>
+            className={`flex-1 flex flex-col items-center gap-0.5 transition-all ${tab === key ? "scale-110" : "opacity-40"}`}>
+            <span className="text-xl">{emoji}</span>
+            <span className={`text-[10px] font-medium ${tab === key ? "text-green-500" : "text-gray-400"}`}>{label}</span>
           </button>
         ))}
       </div>
