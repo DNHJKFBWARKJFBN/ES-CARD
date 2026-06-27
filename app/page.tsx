@@ -73,9 +73,6 @@ type Tab = "home" | "expenses" | "income" | "analytics" | "upload";
 export default function App() {
   const [txns, setTxns] = useState<Transaction[]>([]);
   const [tab, setTab] = useState<Tab>("home");
-  const [budget, setBudget] = useState<number | null>(null);
-  const [editingBudget, setEditingBudget] = useState(false);
-  const [budgetInput, setBudgetInput] = useState("");
   const [budgetCredit, setBudgetCredit] = useState<number | null>(null);
   const [budgetDebit, setBudgetDebit] = useState<number | null>(null);
   const [budgetSavings, setBudgetSavings] = useState<number | null>(null);
@@ -90,8 +87,6 @@ export default function App() {
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    const b = localStorage.getItem(BUDGET_KEY);
-    if (b) setBudget(parseFloat(b));
     const bc = localStorage.getItem(BUDGET_CREDIT_KEY);
     if (bc) setBudgetCredit(parseFloat(bc));
     const bd = localStorage.getItem(BUDGET_DEBIT_KEY);
@@ -199,15 +194,6 @@ export default function App() {
     finally { setUploading(false); }
   }, [selectedSource, filePassword]);
 
-  const saveBudget = () => {
-    const v = parseFloat(budgetInput.replace(/,/g, ""));
-    if (!isNaN(v) && v > 0) {
-      setBudget(v);
-      localStorage.setItem(BUDGET_KEY, String(v));
-    }
-    setEditingBudget(false);
-  };
-
   const saveSubBudget = (key: string) => {
     const v = parseFloat(subBudgetInput.replace(/,/g, ""));
     if (!isNaN(v) && v > 0) {
@@ -238,46 +224,36 @@ export default function App() {
         {/* ── 홈 탭 ── */}
         {tab === "home" && (
           <>
-            {/* 예산 카드 */}
-            <div className="bg-gradient-to-br from-green-500 to-emerald-600 rounded-3xl p-5 text-white shadow-lg">
-              <div className="flex items-center justify-between mb-1">
-                <p className="text-xs opacity-80">이번 달 예산</p>
-                {!editingBudget && (
-                  <button onClick={() => { setBudgetInput(budget ? String(budget) : ""); setEditingBudget(true); }} className="opacity-70 hover:opacity-100">
-                    <Pencil size={13} />
-                  </button>
-                )}
-              </div>
-              {editingBudget ? (
-                <div className="flex items-center gap-2">
-                  <span className="text-lg">₩</span>
-                  <input
-                    autoFocus
-                    type="number"
-                    value={budgetInput}
-                    onChange={(e) => setBudgetInput(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === "Enter") saveBudget(); if (e.key === "Escape") setEditingBudget(false); }}
-                    className="bg-white/20 rounded-lg px-2 py-1 text-xl font-bold w-40 outline-none placeholder-white/50"
-                    placeholder="0"
-                  />
-                  <button onClick={saveBudget} className="bg-white/20 rounded-full p-1"><Check size={14} /></button>
-                </div>
-              ) : (
-                <p className="text-3xl font-bold mb-3">{budget ? fmt(budget) : <span className="text-white/60 text-lg">예산 미설정</span>}</p>
-              )}
-
-              {budget && (
-                <>
-                  <div className="h-1.5 bg-white/30 rounded-full overflow-hidden mb-2">
-                    <div className="h-full bg-white rounded-full transition-all" style={{ width: `${Math.min(100, (totalExpense / budget) * 100)}%` }} />
+            {/* 메인 예산 카드 — 신용+체크 합산 자동계산 */}
+            {(() => {
+              const totalBudget = (budgetCredit ?? 0) + (budgetDebit ?? 0);
+              const usedPct = totalBudget > 0 ? Math.min(100, (totalExpense / totalBudget) * 100) : 0;
+              const remaining = Math.max(0, totalBudget - totalExpense);
+              return (
+                <div className="bg-gradient-to-br from-green-400 to-emerald-600 rounded-3xl p-6 text-white shadow-xl">
+                  <p className="text-xs opacity-70 mb-1">이번 달 총 예산</p>
+                  <p className="text-4xl font-bold tracking-tight mb-1">
+                    {totalBudget > 0 ? fmt(totalBudget) : <span className="text-white/50 text-2xl">신용+체크 예산을 입력해주세요</span>}
+                  </p>
+                  {totalBudget > 0 && (
+                    <p className="text-xs opacity-60 mb-4">신용 {fmt(budgetCredit ?? 0)} + 체크 {fmt(budgetDebit ?? 0)}</p>
+                  )}
+                  <div className="h-2 bg-white/25 rounded-full overflow-hidden mb-3">
+                    <div
+                      className="h-full rounded-full transition-all"
+                      style={{
+                        width: `${usedPct}%`,
+                        background: usedPct >= 90 ? "#fca5a5" : "white",
+                      }}
+                    />
                   </div>
                   <div className="flex justify-between text-xs opacity-80">
-                    <span>지출 {fmt(totalExpense)}</span>
-                    <span>잔여 {fmt(Math.max(0, budget - totalExpense))}</span>
+                    <span>사용 {fmt(totalExpense)} <span className="opacity-60">({usedPct.toFixed(0)}%)</span></span>
+                    <span>잔여 {totalBudget > 0 ? fmt(remaining) : "-"}</span>
                   </div>
-                </>
-              )}
-            </div>
+                </div>
+              );
+            })()}
 
             {/* 신용카드 / 체크카드 / 저금 예산 */}
             <div className="grid grid-cols-3 gap-2">

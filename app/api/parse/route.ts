@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as XLSX from "xlsx";
-import ExcelJS from "exceljs";
 import { parseKakaoCSV, parseKakaoExcelRows, parseShinhanData, guessCategory } from "@/lib/parsers";
 
 export async function POST(req: NextRequest) {
@@ -11,8 +10,7 @@ export async function POST(req: NextRequest) {
 
   if (!file) return NextResponse.json({ error: "파일이 없습니다." }, { status: 400 });
 
-  const arrayBuffer = await file.arrayBuffer();
-  const buffer = Buffer.from(arrayBuffer);
+  const buffer = Buffer.from(await file.arrayBuffer());
   const name = file.name.toLowerCase();
   const isExcel = name.endsWith(".xlsx") || name.endsWith(".xls");
 
@@ -21,38 +19,34 @@ export async function POST(req: NextRequest) {
 
     if (source === "kakao" && !isExcel) {
       // 카카오뱅크 CSV (암호 없음)
-      const text = buffer.toString("utf-8").replace(/^﻿/, ""); // BOM 제거
+      const text = buffer.toString("utf-8").replace(/^﻿/, "");
       txns = parseKakaoCSV(text);
 
     } else if (source === "kakao" && isExcel) {
-      // 카카오뱅크 엑셀 — exceljs로 암호 해제
+      // 카카오뱅크 엑셀 — SheetJS로 암호 해제 후 파싱
       if (!password) {
         return NextResponse.json(
           { error: "카카오뱅크 엑셀 파일은 비밀번호가 필요합니다. (주민번호 앞 6자리)" },
           { status: 400 }
         );
       }
-      const wb = new ExcelJS.Workbook();
-      // exceljs Buffer type mismatch workaround
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (wb.xlsx.load as any)(arrayBuffer, { password });
-      const ws = wb.worksheets[0];
-      if (!ws) throw new Error("시트를 읽을 수 없습니다.");
-
-      // 모든 행을 raw value 배열로 변환
-      const rows: (string | number | Date | null)[][] = [];
-      ws.eachRow((row) => {
-        const vals = (row.values ?? []) as (string | number | Date | null)[];
-        rows.push(vals.slice(1)); // index 1부터 (exceljs row.values[0]은 빈값)
+      // SheetJS 0.18+ 는 password 옵션으로 OOXML 암호화 지원
+      const wb = XLSX.read(buffer, { type: "buffer", cellDates: true, password });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      // raw rows 추출
+      const rows = XLSX.utils.sheet_to_json<(string | number | Date | null)[]>(ws, {
+        header: 1,
+        defval: null,
+        raw: false, // 날짜를 문자열로
       });
-      txns = parseKakaoExcelRows(rows);
+      txns = parseKakaoExcelRows(rows as (string | number | Date | null)[][]);
 
     } else {
-      // 신한카드 등 — xlsx로 파싱 (암호 있으면 전달)
+      // 신한카드 등
       const readOpts: XLSX.ParsingOptions = { type: "buffer", cellDates: true };
       if (password) (readOpts as Record<string, unknown>).password = password;
-      const xlsWb = XLSX.read(buffer, readOpts);
-      const ws = xlsWb.Sheets[xlsWb.SheetNames[0]];
+      const wb = XLSX.read(buffer, readOpts);
+      const ws = wb.Sheets[wb.SheetNames[0]];
       const rows: string[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" }) as string[][];
       txns = parseShinhanData(rows);
     }
@@ -62,10 +56,9 @@ export async function POST(req: NextRequest) {
 
   } catch (e: unknown) {
     const msg = (e as Error).message ?? "파싱 오류";
-    // 비밀번호 오류 안내
-    if (msg.toLowerCase().includes("password") || msg.includes("암호") || msg.includes("decrypt")) {
+    if (msg.toLowerCase().includes("password") || msg.toLowerCase().includes("decrypt") || msg.toLowerCase().includes("암호")) {
       return NextResponse.json(
-        { error: "비밀번호가 틀렸거나 암호화 방식이 지원되지 않습니다. 비밀번호를 확인해주세요." },
+        { error: "비밀번호가 틀렸습니다. 주민번호 앞 6자리를 확인해주세요." },
         { status: 400 }
       );
     }
