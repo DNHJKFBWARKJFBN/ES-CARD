@@ -1,11 +1,11 @@
 "use client";
 
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
-import { ArrowUpRight, ArrowDownRight, Pencil, Check, ChevronLeft, ChevronRight, Plus, X, Copy, RefreshCw } from "lucide-react";
+import { ArrowUpRight, ArrowDownRight, Pencil, Check, ChevronLeft, ChevronRight, Plus, X, RefreshCw } from "lucide-react";
 
-const TARGET_KEY  = "es_savings_target";
-const TXN_KEY     = "es_savings_txns";
-const SYNC_KEY_LS = "es_sync_key";
+const TARGET_KEY = "es_savings_target";
+const TXN_KEY    = "es_savings_txns";
+const CLOUD_KEY  = "es_default"; // 단일 고정 키 — 모든 기기 공유
 
 type EntryType = "savings" | "expense";
 interface Transaction {
@@ -94,38 +94,6 @@ function AddModal({ type, onSave, onClose }: {
   );
 }
 
-/* ── 동기화 코드 모달 ── */
-function SyncModal({ currentKey, onApply, onClose }: {
-  currentKey: string; onApply: (k: string) => void; onClose: () => void;
-}) {
-  const [input, setInput] = useState("");
-  return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-end md:items-center justify-center" onClick={onClose}>
-      <div className="bg-white w-full md:w-[380px] md:rounded-3xl rounded-t-3xl p-6 pb-10 md:pb-6 space-y-4" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between">
-          <p className="font-bold text-gray-800 text-sm">🔗 동기화 코드 입력</p>
-          <button onClick={onClose}><X size={18} className="text-gray-400" /></button>
-        </div>
-        <p className="text-xs text-gray-500">다른 기기의 동기화 코드를 입력하면 데이터가 공유됩니다.</p>
-        <div>
-          <label className="text-xs text-gray-400 mb-1 block">현재 내 코드</label>
-          <code className="block bg-gray-100 rounded-lg px-3 py-2 text-xs text-gray-700 break-all">{currentKey}</code>
-        </div>
-        <div>
-          <label className="text-xs text-gray-400 mb-1 block">다른 기기 코드 붙여넣기</label>
-          <input type="text" placeholder="코드 입력..."
-            value={input} onChange={e => setInput(e.target.value)}
-            className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-green-300" />
-        </div>
-        <button
-          onClick={() => { if (input.trim().length >= 6) { onApply(input.trim()); onClose(); } }}
-          className="w-full py-3 rounded-2xl bg-green-500 text-white font-bold text-sm hover:opacity-90 transition-opacity">
-          이 코드로 동기화
-        </button>
-      </div>
-    </div>
-  );
-}
 
 export default function App() {
   const [txns,          setTxns]          = useState<Transaction[]>([]);
@@ -134,56 +102,38 @@ export default function App() {
   const [targetInput,   setTargetInput]   = useState("");
   const [tab,           setTab]           = useState<Tab>("home");
   const [monthOffset,   setMonthOffset]   = useState(0);
-  const [addModal,      setAddModal]      = useState<EntryType | null>(null);
-  const [syncKey,       setSyncKey]       = useState<string>("");
-  const [syncStatus,    setSyncStatus]    = useState<"idle" | "saving" | "saved" | "error">("idle");
-  const [showSyncModal, setShowSyncModal] = useState(false);
-  const [copied,        setCopied]        = useState(false);
-  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [addModal,   setAddModal]   = useState<EntryType | null>(null);
+  const [syncStatus, setSyncStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const saveTimer   = useRef<ReturnType<typeof setTimeout> | null>(null);
   const initialized = useRef(false);
 
-  /* ── 초기화 ── */
+  /* ── 초기화: 서버 우선, 없으면 localStorage ── */
   useEffect(() => {
-    let key = localStorage.getItem(SYNC_KEY_LS);
-    if (!key) {
-      key = crypto.randomUUID();
-      localStorage.setItem(SYNC_KEY_LS, key);
-    }
-    setSyncKey(key);
-    loadFromServer(key);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  /* ── 서버에서 불러오기 ── */
-  async function loadFromServer(key: string) {
-    try {
-      const res = await fetch(`/api/sync?key=${encodeURIComponent(key)}`);
-      if (!res.ok) throw new Error();
-      const data = await res.json();
-      if (data && data.txns) {
-        setTxns(data.txns);
-        setTarget(data.target ?? null);
-        localStorage.setItem(TXN_KEY,    JSON.stringify(data.txns));
-        if (data.target) localStorage.setItem(TARGET_KEY, String(data.target));
-      } else {
-        // 서버에 없으면 localStorage 로드
+    (async () => {
+      try {
+        const res = await fetch(`/api/sync?key=${CLOUD_KEY}`);
+        const data = res.ok ? await res.json() : null;
+        if (data?.txns) {
+          setTxns(data.txns);
+          setTarget(data.target ?? null);
+        } else {
+          const t = localStorage.getItem(TARGET_KEY);
+          if (t) setTarget(parseFloat(t));
+          const d = localStorage.getItem(TXN_KEY);
+          if (d) setTxns(JSON.parse(d));
+        }
+      } catch {
         const t = localStorage.getItem(TARGET_KEY);
         if (t) setTarget(parseFloat(t));
         const d = localStorage.getItem(TXN_KEY);
         if (d) setTxns(JSON.parse(d));
       }
-    } catch {
-      // KV 미설정 등 — localStorage fallback
-      const t = localStorage.getItem(TARGET_KEY);
-      if (t) setTarget(parseFloat(t));
-      const d = localStorage.getItem(TXN_KEY);
-      if (d) setTxns(JSON.parse(d));
-    }
-    initialized.current = true;
-  }
+      initialized.current = true;
+    })();
+  }, []);
 
-  /* ── 서버에 저장 (debounce 800ms) ── */
-  function scheduleSync(newTxns: Transaction[], newTarget: number | null, key: string) {
+  /* ── 클라우드 저장 (debounce 800ms) ── */
+  function scheduleSync(newTxns: Transaction[], newTarget: number | null) {
     if (!initialized.current) return;
     setSyncStatus("saving");
     if (saveTimer.current) clearTimeout(saveTimer.current);
@@ -192,7 +142,7 @@ export default function App() {
         const res = await fetch("/api/sync", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ key, txns: newTxns, target: newTarget }),
+          body: JSON.stringify({ key: CLOUD_KEY, txns: newTxns, target: newTarget }),
         });
         setSyncStatus(res.ok ? "saved" : "error");
       } catch {
@@ -208,7 +158,7 @@ export default function App() {
     if (!isNaN(v) && v > 0) {
       setTarget(v);
       localStorage.setItem(TARGET_KEY, String(v));
-      scheduleSync(txns, v, syncKey);
+      scheduleSync(txns, v);
     }
     setEditingTarget(false);
   };
@@ -217,35 +167,18 @@ export default function App() {
     setTxns(prev => {
       const next = [t, ...prev];
       localStorage.setItem(TXN_KEY, JSON.stringify(next));
-      scheduleSync(next, target, syncKey);
+      scheduleSync(next, target);
       return next;
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [target, syncKey]);
+  }, [target]);
 
   const deleteTxn = (id: string) => {
     setTxns(prev => {
       const next = prev.filter(t => t.id !== id);
       localStorage.setItem(TXN_KEY, JSON.stringify(next));
-      scheduleSync(next, target, syncKey);
+      scheduleSync(next, target);
       return next;
-    });
-  };
-
-  /* ── 동기화 코드 변경 ── */
-  const applySyncKey = (newKey: string) => {
-    localStorage.setItem(SYNC_KEY_LS, newKey);
-    setSyncKey(newKey);
-    initialized.current = false;
-    setTxns([]);
-    setTarget(null);
-    loadFromServer(newKey);
-  };
-
-  const copySyncKey = () => {
-    navigator.clipboard.writeText(syncKey).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
     });
   };
 
@@ -326,12 +259,7 @@ export default function App() {
               <span className="text-xl">🐷</span>
               <span className="text-base font-bold text-gray-800">ES 저금통</span>
             </div>
-            <div className="flex items-center gap-2">
-              <SyncBadge />
-              <button onClick={copySyncKey} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400" title="동기화 코드 복사">
-                <Copy size={14} />
-              </button>
-            </div>
+            <SyncBadge />
           </div>
           <MonthPicker />
         </div>
@@ -425,21 +353,6 @@ export default function App() {
                   </div>
                 </div>
               )}
-
-              {/* 동기화 코드 카드 */}
-              <div className="bg-white rounded-2xl p-4 shadow-sm">
-                <p className="text-xs font-semibold text-gray-500 mb-2">🔗 기기 간 동기화</p>
-                <div className="flex items-center gap-2 mb-1">
-                  <code className="text-[11px] text-gray-600 bg-gray-100 px-2 py-1.5 rounded-lg flex-1 truncate">{syncKey}</code>
-                  <button onClick={copySyncKey}
-                    className={`text-xs font-medium shrink-0 px-2 py-1.5 rounded-lg transition-colors ${copied ? "text-green-500 bg-green-50" : "text-gray-500 hover:bg-gray-100"}`}>
-                    {copied ? "복사됨" : <Copy size={13} />}
-                  </button>
-                </div>
-                <button onClick={() => setShowSyncModal(true)} className="text-[10px] text-blue-400 hover:text-blue-500">
-                  다른 기기 코드 입력 →
-                </button>
-              </div>
 
               {txns.length === 0 && (
                 <div className="text-center py-12">
@@ -556,15 +469,7 @@ export default function App() {
           ))}
         </div>
 
-        {/* 모달들 */}
         {addModal && <AddModal type={addModal} onSave={addTxn} onClose={() => setAddModal(null)} />}
-        {showSyncModal && (
-          <SyncModal
-            currentKey={syncKey}
-            onApply={applySyncKey}
-            onClose={() => setShowSyncModal(false)}
-          />
-        )}
       </div>
     </div>
   );
