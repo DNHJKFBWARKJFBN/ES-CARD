@@ -74,6 +74,7 @@ export default function App() {
   const [editingBudget, setEditingBudget] = useState(false);
   const [budgetInput, setBudgetInput] = useState("");
   const [selectedSource, setSelectedSource] = useState("kakao");
+  const [filePassword, setFilePassword] = useState("");
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [editingCat, setEditingCat] = useState<string | null>(null);
@@ -170,6 +171,7 @@ export default function App() {
     const form = new FormData();
     form.append("file", file);
     form.append("source", selectedSource);
+    if (filePassword) form.append("password", filePassword);
     try {
       const res = await fetch("/api/parse", { method: "POST", body: form });
       const data = await res.json();
@@ -181,7 +183,7 @@ export default function App() {
       setTab("home");
     } catch (e: unknown) { setUploadError((e as Error).message); }
     finally { setUploading(false); }
-  }, [selectedSource]);
+  }, [selectedSource, filePassword]);
 
   const saveBudget = () => {
     const v = parseFloat(budgetInput.replace(/,/g, ""));
@@ -506,6 +508,28 @@ export default function App() {
                   </button>
                 ))}
               </div>
+              {/* 비밀번호 입력 (엑셀 암호 해제) */}
+              <div className="mb-3">
+                <label className="text-xs text-gray-400 block mb-1">
+                  파일 비밀번호 <span className="text-gray-300">(엑셀에 암호가 걸린 경우)</span>
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="password"
+                    value={filePassword}
+                    onChange={(e) => setFilePassword(e.target.value)}
+                    placeholder={selectedSource === "kakao" ? "주민번호 앞 6자리" : "비밀번호 입력"}
+                    className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm outline-none focus:border-green-300"
+                  />
+                  {filePassword && (
+                    <button onClick={() => setFilePassword("")} className="text-xs text-gray-400 hover:text-gray-600 px-2">
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
+                <p className="text-[10px] text-gray-300 mt-1">입력한 비밀번호는 저장되지 않습니다</p>
+              </div>
+
               <div
                 onDrop={(e) => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) handleFile(f); }}
                 onDragOver={(e) => e.preventDefault()}

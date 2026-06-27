@@ -6,6 +6,7 @@ export async function POST(req: NextRequest) {
   const form = await req.formData();
   const file = form.get("file") as File | null;
   const source = form.get("source") as string | null;
+  const password = (form.get("password") as string | null) || undefined;
 
   if (!file) return NextResponse.json({ error: "파일이 없습니다." }, { status: 400 });
 
@@ -15,12 +16,19 @@ export async function POST(req: NextRequest) {
   try {
     let txns;
 
-    if (source === "kakao" || name.endsWith(".csv")) {
+    if (source === "kakao" && !name.endsWith(".xlsx") && !name.endsWith(".xls")) {
+      // 카카오뱅크 CSV (암호 없음)
       const text = buffer.toString("utf-8").replace(/^﻿/, ""); // BOM 제거
       txns = parseKakaoCSV(text);
+    } else if (source === "kakao") {
+      // 카카오뱅크 엑셀 (암호: 주민번호 앞 6자리)
+      const wb = XLSX.read(buffer, { type: "buffer", cellDates: true, password });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows: string[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" }) as string[][];
+      txns = parseKakaoCSV(rows.map((r) => r.join(",")).join("\n"));
     } else {
-      // Excel 파싱 (신한카드 등)
-      const wb = XLSX.read(buffer, { type: "buffer", cellDates: true });
+      // 신한카드 등 기타 엑셀
+      const wb = XLSX.read(buffer, { type: "buffer", cellDates: true, password });
       const ws = wb.Sheets[wb.SheetNames[0]];
       const rows: string[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" }) as string[][];
       txns = parseShinhanData(rows);
